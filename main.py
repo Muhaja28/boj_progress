@@ -84,6 +84,24 @@ class SolvedAcClient:
             return False
 
         return True
+    async def get_problem_info(self, problem_id: int) -> Optional[Dict[str, Any]]:
+        '''문제 정보(이름, 난이도 등) 가져옴. 실패하면 None.'''
+        try:
+            resp = await self.client.get(
+                "/problem/show",
+                params={"problemId": problem_id},
+            )
+        except httpx.HTTPError:
+            return None
+        
+        if resp.status_code != 200:
+            return None
+        
+        data = resp.json()
+        if not data:
+            return None
+        
+        return data   # solved.ac는 단일 항목도 list 형태로 반환
 
     async def close(self):
         await self.client.aclose()
@@ -98,8 +116,16 @@ async def shutdown_event():
 
 
 # ---- 유틸 함수 ----
+TIER_NAMES = ["브론즈", "실버", "골드", "플래티넘", "다이아몬드", "루비"]
 
-def compute_progress(handle: str, workbook_key: str, solved_set: Set[int]):
+def convert_tier(tier: int) -> str:
+    if tier == 0:
+        return "미분류0"
+    group = (tier - 1) // 5   # 0=브론즈 ~ 5=루비
+    level = 5 - ((tier - 1) % 5)  # 5~1
+    return f"{TIER_NAMES[group]}{level}"
+
+async def compute_progress(handle: str, workbook_key: str, solved_set: Set[int]):
     wb = WORKBOOKS[workbook_key]
     problems = wb["problems"]
 
@@ -107,10 +133,25 @@ def compute_progress(handle: str, workbook_key: str, solved_set: Set[int]):
     unsolved_in = []
 
     for pid in problems:
-        if pid in solved_set:
-            solved_in.append(pid)
+        info = await solvedac_client.get_problem_info(pid)
+        if info:
+            item = info[0]  # solved.ac는 리스트로 반환
+            name = item["titleKo"]
+            tier = convert_tier(item["level"])
         else:
-            unsolved_in.append(pid)
+            name = "(알 수 없음)"
+            tier = "미분류0"
+
+        entry = {
+            "pid": pid,
+            "name": name,
+            "tier": tier,
+        }
+
+        if pid in solved_set:
+            solved_in.append(entry)
+        else:
+            unsolved_in.append(entry)
 
     total = len(problems)
     solved_cnt = len(solved_in)
@@ -126,7 +167,6 @@ def compute_progress(handle: str, workbook_key: str, solved_set: Set[int]):
         "solved_list": solved_in,
         "unsolved_list": unsolved_in,
     }
-
 
 def save_workbooks_to_file() -> None:
     """WORKBOOKS 딕셔너리를 workbooks.json 파일에 저장."""
@@ -219,6 +259,59 @@ async def admin_add_problem(
                             admin_message = f"문제 {pid_int} 이(가) '{WORKBOOKS[workbook]['name']}' 문제집에 추가되었습니다."
 
     # 학생 진도 조회는 이 요청에서는 수행하지 않음(progress=None 유지)
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "workbooks": WORKBOOKS,
+            "selected_handle": "",
+            "selected_workbook": workbook if workbook in WORKBOOKS else "",
+            "progress": progress,
+            "error": error,
+            "admin_error": admin_error,
+            "admin_message": admin_message,
+        },
+    )
+@app.post("/admin/delete_problem", response_class=HTMLResponse)
+async def admin_delete_problem(
+    request: Request,
+    admin_key: str = Form(...),
+    problem_id: str = Form(...),
+    workbook: str = Form(...),
+):
+    progress = None
+    error = None
+    admin_error = None
+    admin_message = None
+
+    # 1) 관리자 키 확인
+    if admin_key != ADMIN_KEY:
+        admin_error = "관리자 키가 올바르지 않습니다."
+    else:
+        # 2) 문제 번호 검증
+        problem_id = problem_id.strip()
+        if not problem_id.isdecimal():
+            admin_error = "문제 번호는 1000 이상의 정수여야 합니다."
+        else:
+            pid_int = int(problem_id)
+            if pid_int < 1000:
+                admin_error = "문제 번호는 1000 이상의 정수여야 합니다."
+            else:
+                # 3) workbook 검증
+                if workbook not in WORKBOOKS:
+                    admin_error = "존재하지 않는 문제집입니다."
+                else:
+                    problems = WORKBOOKS[workbook]["problems"]
+                    
+                    if pid_int not in problems:
+                        admin_error = f"해당 문제({pid_int})는 문제집에 존재하지 않습니다."
+                    else:
+                        problems.remove(pid_int)   # 삭제
+                        save_workbooks_to_file()
+                        admin_message = (
+                            f"문제 {pid_int} 이(가) '{WORKBOOKS[workbook]['name']}' 문제집에서 삭제되었습니다."
+                        )
+
     return templates.TemplateResponse(
         "index.html",
         {

@@ -47,25 +47,27 @@
 
     <h4>푼 문제</h4>
     <ul>
-        {% for pid in progress.solved_list %}
+    {% for item in progress.solved_list %}
         <li>
-            <a href="https://www.acmicpc.net/problem/{{ pid }}" target="_blank">
-                {{ pid }}
+            <a href="https://www.acmicpc.net/problem/{{ item.pid }}" target="_blank">
+                {{ item.pid }} - {{ item.name }} ({{ item.tier }})
             </a>
         </li>
-        {% endfor %}
+    {% endfor %}
     </ul>
+
 
     <h4>안 푼 문제</h4>
     <ul>
-        {% for pid in progress.unsolved_list %}
+    {% for item in progress.unsolved_list %}
         <li>
-            <a href="https://www.acmicpc.net/problem/{{ pid }}" target="_blank">
-                {{ pid }}
+            <a href="https://www.acmicpc.net/problem/{{ item.pid }}" target="_blank">
+                {{ item.pid }} - {{ item.name }} ({{ item.tier }})
             </a>
         </li>
-        {% endfor %}
+    {% endfor %}
     </ul>
+
     {% endif %}
 </section>
 
