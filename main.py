@@ -1,16 +1,14 @@
-# 서버 실행 : py -m uvicorn main:app --reload
-#
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Set, Optional
+from typing import Dict, Any, Set, Optional
 
-from fastapi import FastAPI, Request, Query
+from fastapi import FastAPI, Request, Query, Form
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import httpx
 
-from fastapi.staticfiles import StaticFiles
-
+# ---- 기본 설정 ----
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -23,6 +21,11 @@ app = FastAPI(title="BOJ Workbook Progress Viewer")
 
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
+
+ADMIN_KEY = "lenamayer28"
+
+
+# ---- solved.ac 클라이언트 ----
 
 class SolvedAcClient:
     BASE_URL = "https://solved.ac/api/v3"
@@ -60,6 +63,28 @@ class SolvedAcClient:
 
         return solved
 
+    async def problem_exists(self, problem_id: int) -> bool:
+        """
+        BOJ 문제 번호가 실제로 존재하는지 solved.ac를 통해 확인.
+        존재하면 True, 없으면 False.
+        """
+        try:
+            resp = await self.client.get(
+                "/problem/show",
+                params={"problemId": problem_id},
+            )
+        except httpx.HTTPError:
+            # 네트워크 오류 등은 일단 "존재하지 않는다"로 처리 (관리자에게 다시 시도 유도)
+            return False
+
+        if resp.status_code == 404:
+            return False
+        if resp.status_code != 200:
+            # 기타 이상 상태 코드도 안전하게 False 처리
+            return False
+
+        return True
+
     async def close(self):
         await self.client.aclose()
 
@@ -71,6 +96,8 @@ solvedac_client = SolvedAcClient()
 async def shutdown_event():
     await solvedac_client.close()
 
+
+# ---- 유틸 함수 ----
 
 def compute_progress(handle: str, workbook_key: str, solved_set: Set[int]):
     wb = WORKBOOKS[workbook_key]
@@ -101,6 +128,14 @@ def compute_progress(handle: str, workbook_key: str, solved_set: Set[int]):
     }
 
 
+def save_workbooks_to_file() -> None:
+    """WORKBOOKS 딕셔너리를 workbooks.json 파일에 저장."""
+    with open(BASE_DIR / "workbooks.json", "w", encoding="utf-8") as f:
+        json.dump(WORKBOOKS, f, ensure_ascii=False, indent=2)
+
+
+# ---- 학생 진도 조회 (기존 기능) ----
+
 @app.get("/", response_class=HTMLResponse)
 async def index(
     request: Request,
@@ -129,5 +164,71 @@ async def index(
             "selected_workbook": workbook or "",
             "progress": progress,
             "error": error,
+            # 관리자 영역 메시지 (기본값 None)
+            "admin_error": None,
+            "admin_message": None,
+        },
+    )
+
+
+# ---- 관리자: 문제집에 문제 추가 ----
+
+@app.post("/admin/add_problem", response_class=HTMLResponse)
+async def admin_add_problem(
+    request: Request,
+    admin_key: str = Form(...),
+    problem_id: str = Form(...),
+    workbook: str = Form(...),
+):
+    progress = None
+    error = None
+    admin_error = None
+    admin_message = None
+
+    # 1) 관리자 키 검증
+    if admin_key != ADMIN_KEY:
+        admin_error = "관리자 키가 올바르지 않습니다."
+    else:
+        # 2) 문제 번호 입력 검증
+        problem_id = problem_id.strip()
+        if not problem_id.isdecimal():
+            admin_error = "문제 번호는 1000 이상의 정수여야 합니다."
+        else:
+            pid_int = int(problem_id)
+            if pid_int < 1000:
+                admin_error = "문제 번호는 1000 이상의 정수여야 합니다."
+            else:
+                # 3) 문제집 키 검증 (화이트리스트)
+                if workbook not in WORKBOOKS:
+                    admin_error = "존재하지 않는 문제집입니다."
+                else:
+                    # 4) solved.ac로 문제 존재 여부 확인
+                    exists = await solvedac_client.problem_exists(pid_int)
+                    if not exists:
+                        admin_error = "BOJ에 존재하지 않는 문제 번호입니다."
+                    else:
+                        # 5) 중복 여부 확인 후 추가
+                        problems = WORKBOOKS[workbook]["problems"]
+                        if pid_int in problems:
+                            admin_message = f"이미 문제집에 포함된 문제입니다: {pid_int}"
+                        else:
+                            problems.append(pid_int)
+                            # 정렬(optional): 항상 오름차순 유지하고 싶다면
+                            problems.sort()
+                            save_workbooks_to_file()
+                            admin_message = f"문제 {pid_int} 이(가) '{WORKBOOKS[workbook]['name']}' 문제집에 추가되었습니다."
+
+    # 학생 진도 조회는 이 요청에서는 수행하지 않음(progress=None 유지)
+    return templates.TemplateResponse(
+        "index.html",
+        {
+            "request": request,
+            "workbooks": WORKBOOKS,
+            "selected_handle": "",
+            "selected_workbook": workbook if workbook in WORKBOOKS else "",
+            "progress": progress,
+            "error": error,
+            "admin_error": admin_error,
+            "admin_message": admin_message,
         },
     )

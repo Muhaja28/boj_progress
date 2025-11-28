@@ -10,8 +10,14 @@ h1 {
 .error {
     color: red;
     font-weight: bold;
+    margin-top: 10px;
 }
 
 button {
     padding: 6px 12px;
+}
+.message {
+    color: green;
+    font-weight: bold;
+    margin-top: 10px;
 }

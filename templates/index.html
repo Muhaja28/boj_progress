@@ -6,64 +6,107 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-
+<h2>py -m uvicorn main:app --reload 를 실행</h2>
 <h1>BOJ 문제집 진도 조회</h1>
 
-<form action="/" method="get">
-    <label>학생 BOJ ID:</label><br>
-    <input type="text" name="handle" value="{{ selected_handle }}" required><br><br>
+<!-- 학생 진도 조회 영역 -->
+<section>
+    <h2>학생 진도 조회</h2>
+    <form action="/" method="get">
+        <label>학생 BOJ ID:</label><br>
+        <input type="text" name="handle" value="{{ selected_handle }}" required><br><br>
 
-    <label>문제집 선택:</label><br>
-    <select name="workbook" required>
-        <option value="">-- 선택 --</option>
-        {% for key, wb in workbooks.items() %}
-        <option value="{{ key }}" {% if key == selected_workbook %}selected{% endif %}>
-            {{ wb.name }} ({{ wb.problems | length }} 문제)
-        </option>
+        <label>문제집 선택:</label><br>
+        <select name="workbook" required>
+            <option value="">-- 선택 --</option>
+            {% for key, wb in workbooks.items() %}
+            <option value="{{ key }}" {% if key == selected_workbook %}selected{% endif %}>
+                {{ wb.name }} ({{ wb.problems | length }} 문제)
+            </option>
+            {% endfor %}
+        </select>
+        <br><br>
+
+        <button type="submit">조회</button>
+    </form>
+
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    {% if progress %}
+    <hr>
+    <h3>조회 결과</h3>
+
+    <p>
+        <strong>학생 ID:</strong> {{ progress.handle }} <br>
+        <strong>문제집:</strong> {{ progress.workbook_name }} <br>
+        <strong>진도:</strong> {{ "%.1f"|format(progress.rate) }}%
+        ({{ progress.solved_cnt }} / {{ progress.total }})
+    </p>
+
+    <h4>푼 문제</h4>
+    <ul>
+        {% for pid in progress.solved_list %}
+        <li>
+            <a href="https://www.acmicpc.net/problem/{{ pid }}" target="_blank">
+                {{ pid }}
+            </a>
+        </li>
         {% endfor %}
-    </select>
-    <br><br>
+    </ul>
 
-    <button type="submit">조회</button>
-</form>
+    <h4>안 푼 문제</h4>
+    <ul>
+        {% for pid in progress.unsolved_list %}
+        <li>
+            <a href="https://www.acmicpc.net/problem/{{ pid }}" target="_blank">
+                {{ pid }}
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</section>
 
-{% if error %}
-<div class="error">{{ error }}</div>
-{% endif %}
-
-{% if progress %}
 <hr>
-<h2>조회 결과</h2>
 
-<p>
-    <strong>학생 ID:</strong> {{ progress.handle }} <br>
-    <strong>문제집:</strong> {{ progress.workbook_name }} <br>
-    <strong>진도:</strong> {{ "%.1f"|format(progress.rate) }}%
-    ({{ progress.solved_cnt }} / {{ progress.total }})
-</p>
+<!-- 관리자용 문제집 관리 영역 -->
+<section>
+    <h2>관리자: 문제집에 BOJ 문제 추가</h2>
+    <form action="/admin/add_problem" method="post">
+        <label>관리자 키:</label><br>
+        <input type="password" name="admin_key" required><br><br>
 
-<h3>푼 문제</h3>
-<ul>
-    {% for pid in progress.solved_list %}
-    <li>
-        <a href="https://www.acmicpc.net/problem/{{ pid }}" target="_blank">
-            {{ pid }}
-        </a>
-    </li>
-    {% endfor %}
-</ul>
+        <label>추가할 BOJ 문제 번호 (1000 이상 정수):</label><br>
+        <input type="text" name="problem_id" required><br><br>
 
-<h3>안 푼 문제</h3>
-<ul>
-    {% for pid in progress.unsolved_list %}
-    <li>
-        <a href="https://www.acmicpc.net/problem/{{ pid }}" target="_blank">
-            {{ pid }}
-        </a>
-    </li>
-    {% endfor %}
-</ul>
-{% endif %}
+        <label>대상 문제집 선택:</label><br>
+        <select name="workbook" required>
+            <option value="">-- 선택 --</option>
+            {% for key, wb in workbooks.items() %}
+            <option value="{{ key }}" {% if key == selected_workbook %}selected{% endif %}>
+                {{ wb.name }} ({{ wb.problems | length }} 문제)
+            </option>
+            {% endfor %}
+        </select>
+        <br><br>
+
+        <button type="submit">문제 추가</button>
+    </form>
+
+    {% if admin_error %}
+    <div class="error">
+        {{ admin_error }}
+    </div>
+    {% endif %}
+
+    {% if admin_message %}
+    <div class="message">
+        {{ admin_message }}
+    </div>
+    {% endif %}
+</section>
 
 </body>
 </html>
