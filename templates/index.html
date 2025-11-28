@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>BOJ 문제집 진도 조회</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<h1>BOJ 문제집 진도 조회</h1>
+
+<form action="/" method="get">
+    <label>학생 BOJ ID:</label><br>
+    <input type="text" name="handle" value="{{ selected_handle }}" required><br><br>
+
+    <label>문제집 선택:</label><br>
+    <select name="workbook" required>
+        <option value="">-- 선택 --</option>
+        {% for key, wb in workbooks.items() %}
+        <option value="{{ key }}" {% if key == selected_workbook %}selected{% endif %}>
+            {{ wb.name }} ({{ wb.problems | length }} 문제)
+        </option>
+        {% endfor %}
+    </select>
+    <br><br>
+
+    <button type="submit">조회</button>
+</form>
+
+{% if error %}
+<div class="error">{{ error }}</div>
+{% endif %}
+
+{% if progress %}
+<hr>
+<h2>조회 결과</h2>
+
+<p>
+    <strong>학생 ID:</strong> {{ progress.handle }} <br>
+    <strong>문제집:</strong> {{ progress.workbook_name }} <br>
+    <strong>진도:</strong> {{ "%.1f"|format(progress.rate) }}%
+    ({{ progress.solved_cnt }} / {{ progress.total }})
+</p>
+
+<h3>푼 문제</h3>
+<ul>
+    {% for pid in progress.solved_list %}
+    <li>
+        <a href="https://www.acmicpc.net/problem/{{ pid }}" target="_blank">
+            {{ pid }}
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+
+<h3>안 푼 문제</h3>
+<ul>
+    {% for pid in progress.unsolved_list %}
+    <li>
+        <a href="https://www.acmicpc.net/problem/{{ pid }}" target="_blank">
+            {{ pid }}
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+
+</body>
+</html>
