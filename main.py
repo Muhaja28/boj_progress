@@ -1,3 +1,5 @@
+# 서버 실행 : py -m uvicorn main:app --reload
+#
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Set, Optional
